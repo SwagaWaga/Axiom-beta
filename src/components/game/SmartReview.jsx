@@ -39,6 +39,7 @@ export default function SmartReview({ collectedWords, session, onComplete }) {
                 audio_url: item.audio_url || null,
                 mastery_level: 1,
                 last_practiced: null,
+                next_review_date: new Date().toISOString(),
                 word_connections: item.word_connections || null
             }));
 

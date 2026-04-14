@@ -21,8 +21,8 @@ export default function AchievementsBoard({ userData }) {
                         <div
                             key={achievement.id}
                             className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 relative overflow-hidden group ${isUnlocked
-                                    ? 'border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 shadow-[0_0_15px_rgba(251,146,60,0.15)] transform hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(251,146,60,0.3)]'
-                                    : 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/50'
+                                ? 'border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 shadow-[0_0_15px_rgba(251,146,60,0.15)] transform hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(251,146,60,0.3)]'
+                                : 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/50'
                                 }`}
                         >
                             <div className="text-4xl mb-3 relative drop-shadow-sm transition-transform duration-300 group-hover:scale-110">
