@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import { playClickSound } from '../../../utils/playSound';
+import { isWordDue } from '../../../lib/srsMath';
 
 export default function WaitingRoom({ onSelectMode, session }) {
     const [stats, setStats] = useState({
@@ -29,10 +30,9 @@ export default function WaitingRoom({ onSelectMode, session }) {
                 data.forEach(w => {
                     if (w.is_mastered) { mastered++; return; }
 
-                    const parsedDate = Date.parse(w.next_review_at);
-                    const isDue = !w.next_review_at || isNaN(parsedDate) || parsedDate <= now;
+                    const isDueCheck = isWordDue(w.next_review_at, now, true); // true = log discrepancies
 
-                    if (isDue) playable++;
+                    if (isDueCheck) playable++;
                     else cooldown++;
 
                     if ((w.recognition_score || 0) >= 70 && !w.is_mastered) {
@@ -58,14 +58,14 @@ export default function WaitingRoom({ onSelectMode, session }) {
     //   Deep Learning  → enabled if any words known (due OR practice)
     //   Deep Training  → enabled if any words known (due OR practice)
     //   Boss Fight     → enabled only if due words exist (review-only mode)
-    const hasAnyWords       = stats.total > 0;
-    const hasDueWords       = stats.playable > 0;
-    const hasPracticeWords  = stats.practiceEligible > 0;
-    const canTrain          = hasDueWords || hasPracticeWords;
-    const canBossFight      = hasDueWords; // Boss Fight stays review-only
+    const hasAnyWords = stats.total > 0;
+    const hasDueWords = stats.playable > 0;
+    const hasPracticeWords = stats.practiceEligible > 0;
+    const canTrain = hasDueWords || hasPracticeWords;
+    const canBossFight = hasDueWords; // Boss Fight stays review-only
 
     const modeLabel = (hasDue, hasPractice) => {
-        if (hasDue)      return null;           // normal — no badge needed
+        if (hasDue) return null;           // normal — no badge needed
         if (hasPractice) return '✦ Practice';  // no due words, will run as practice
         return null;
     };

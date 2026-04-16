@@ -29,11 +29,11 @@ function getEditDistance(a, b) {
     return matrix[b.length][a.length];
 }
 
-export default function SpellingChallenge({ match, onGrade }) {
+export default function SpellingChallenge({ match, onWordComplete }) {
     const [inputVal, setInputVal] = useState('');
     const [revealed, setRevealed] = useState(false);
     const [resultType, setResultType] = useState(null);
-    
+
     const inputRef = useRef(null);
     const payload = match.user_vocabulary;
     const targetWord = payload.word.toLowerCase().trim();
@@ -73,7 +73,7 @@ export default function SpellingChallenge({ match, onGrade }) {
         } else {
             const distance = getEditDistance(answer, targetWord);
             const maxTypo = targetWord.length <= 5 ? 1 : 2;
-            
+
             if (distance <= maxTypo) {
                 currentStatus = 'typo';
             } else {
@@ -88,13 +88,13 @@ export default function SpellingChallenge({ match, onGrade }) {
     const handleContinue = () => {
         playClickSound();
         const currentSpellingScore = match.spelling_score || 0;
-        
+
         if (resultType === 'correct') {
-            onGrade('Easy', { spelling_score: Math.min(100, currentSpellingScore + 15), skipSRS: true });
+            onWordComplete(payload, 'Easy', match._isPractice, { spelling_score: Math.min(100, currentSpellingScore + 15), skipSRS: true });
         } else if (resultType === 'typo') {
-            onGrade('Hard', { spelling_score: Math.min(100, currentSpellingScore + 5), skipSRS: true });
+            onWordComplete(payload, 'Hard', match._isPractice, { spelling_score: Math.min(100, currentSpellingScore + 5), skipSRS: true });
         } else {
-            onGrade('Hard', { spelling_score: Math.max(0, currentSpellingScore - 5), skipSRS: true }, true);
+            onWordComplete(payload, 'Hard', match._isPractice, { spelling_score: Math.max(0, currentSpellingScore - 5), skipSRS: true }, true);
         }
     };
 
@@ -119,13 +119,13 @@ export default function SpellingChallenge({ match, onGrade }) {
         <div className="max-w-4xl mx-auto p-6 font-sans min-h-[70vh] flex flex-col items-center justify-center">
             <div className="bg-slate-900 border border-slate-800 p-8 sm:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-2xl relative flex flex-col min-h-[400px]">
                 <div className="flex-1 flex flex-col justify-center items-center text-center">
-                    
+
                     <span className="text-xs font-black text-indigo-500 uppercase tracking-widest block mb-4">Spelling Challenge</span>
-                    
+
                     <div className="text-4xl sm:text-6xl font-black text-slate-500 tracking-tight break-words mb-8 tracking-[0.3em]">
                         {getMaskedHint(targetWord)}
                     </div>
-                    
+
                     {/* Clue Panel */}
                     <div className="w-full p-6 bg-slate-800/50 rounded-2xl border border-slate-700/50 text-left mb-8 shadow-inner">
                         <p className="text-xl text-slate-200 leading-relaxed font-medium">
@@ -149,8 +149,8 @@ export default function SpellingChallenge({ match, onGrade }) {
                                 autoComplete="off"
                                 spellCheck="false"
                             />
-                            <button 
-                                type="submit" 
+                            <button
+                                type="submit"
                                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-lg"
                             >
                                 Submit
@@ -176,14 +176,14 @@ export default function SpellingChallenge({ match, onGrade }) {
                                     </div>
                                 )}
                                 {resultType === 'correct' && (
-                                     <div className="font-mono text-2xl text-emerald-400">
-                                         {targetWord}
-                                     </div>
+                                    <div className="font-mono text-2xl text-emerald-400">
+                                        {targetWord}
+                                    </div>
                                 )}
                             </div>
-                            
-                            <button 
-                                onClick={handleContinue} 
+
+                            <button
+                                onClick={handleContinue}
                                 autoFocus
                                 className="w-full block bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-lg text-lg"
                             >

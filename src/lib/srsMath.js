@@ -50,3 +50,35 @@ export const evaluateRankPromotion = (profile) => {
     if (avg >= 15) return { rank: 'Scout', is_mastered: false };
     return { rank: 'Seed', is_mastered: false };
 };
+
+/**
+ * Universally unifies "Due" evaluation across the entire application.
+ * Standard used: EXACT SECOND (<= Date.now()) + Timezone Parsing
+ * 
+ * Includes diagnostic logging for mismatched evaluations.
+ */
+export const isWordDue = (nextReviewAtStr, referenceTimeMs, isLogging = false) => {
+    if (!nextReviewAtStr) return true; // Newly added words
+    
+    const parsedDateMs = Date.parse(nextReviewAtStr);
+    
+    // Fallback if db corruption occurred
+    if (isNaN(parsedDateMs)) return true;
+    
+    const isDue = parsedDateMs <= referenceTimeMs;
+
+    if (isLogging && !isDue) {
+        // Find how many hours out they are
+        const diffHours = ((parsedDateMs - referenceTimeMs) / (1000 * 60 * 60)).toFixed(2);
+        if (diffHours < 24) {
+            console.log(`[Diagnostic] Word marked NOT DUE. Diff: +${diffHours}h`, {
+                rawString: nextReviewAtStr,
+                parsedDateMs,
+                referenceTimeMs,
+                diffHours
+            });
+        }
+    }
+    
+    return isDue;
+};

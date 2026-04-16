@@ -10,8 +10,8 @@ interface FlashcardProps {
   onClose?: () => void;
 }
 
-export const Flashcard: React.FC<FlashcardProps> = ({ 
-  wordObj, 
+export const Flashcard: React.FC<FlashcardProps> = ({
+  wordObj,
   preferredAccent,
   onEdit,
   onPlayAudio,
@@ -31,7 +31,7 @@ export const Flashcard: React.FC<FlashcardProps> = ({
 
   // Determine if the word has passed the early learning stages.
   // If mastery_level is undefined, 0, 1, or 2, this MUST evaluate to false.
-  const currentPhase = wordObj.mastery_level || 0; 
+  const currentPhase = wordObj.mastery_level || 0;
   const isAdvancedPhase = Number(currentPhase) >= 3;
 
   const getGrowthIndicator = (level: number) => {
@@ -44,14 +44,13 @@ export const Flashcard: React.FC<FlashcardProps> = ({
   const growth = getGrowthIndicator(wordObj.mastery_level || 1);
 
   return (
-    <div 
+    <div
       className="w-full h-[75vh] sm:h-auto sm:min-h-[500px] flex flex-col overflow-hidden relative [perspective:1000px]"
     >
       {/* Inner card wrapper handling the 3D flip */}
-      <div 
-        className={`w-full h-full relative flex-1 [transform-style:preserve-3d] transition-transform duration-500 ease-out ${
-          isFlipped ? '[transform:rotateY(180deg)]' : ''
-        }`}
+      <div
+        className={`w-full h-full relative flex-1 [transform-style:preserve-3d] transition-transform duration-500 ease-out ${isFlipped ? '[transform:rotateY(180deg)]' : ''
+          }`}
       >
         {/* ── FRONT FACE ── */}
         <div className="absolute inset-0 w-full h-full bg-slate-900 rounded-none sm:rounded-2xl shadow-lg border-0 sm:border border-slate-700 [backface-visibility:hidden] flex flex-col overflow-hidden">

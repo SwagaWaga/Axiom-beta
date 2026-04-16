@@ -21,7 +21,7 @@ const getLevenshteinDistance = (a, b) => {
     return matrix[b.length][a.length];
 };
 
-export default function BossFight({ match, onGrade }) {
+export default function BossFight({ match, onWordComplete }) {
     const [input, setInput] = useState('');
     const [feedback, setFeedback] = useState(null); // 'correct', 'typo', 'wrong'
     const inputRef = useRef(null);
@@ -60,7 +60,7 @@ export default function BossFight({ match, onGrade }) {
         }
 
         setTimeout(() => {
-            onGrade(finalGrade, {
+            onWordComplete(match, finalGrade, match._isPractice, {
                 recall_score: Math.min(100, Math.max(0, recL)),
                 spelling_score: Math.min(100, Math.max(0, spl)),
                 recognition_score: Math.min(100, Math.max(0, recg))
@@ -73,7 +73,7 @@ export default function BossFight({ match, onGrade }) {
             <div className={`bg-slate-900 border-2 p-8 sm:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-2xl relative flex flex-col min-h-[400px] transition-colors duration-300 ${feedback === 'correct' ? 'border-emerald-500' : feedback === 'typo' ? 'border-orange-500' : feedback === 'wrong' ? 'border-red-500' : 'border-slate-800'}`}>
                 <div className="flex-1 flex flex-col items-center text-center">
                     <span className="text-xs font-black text-rose-500 uppercase tracking-widest block mb-4">Boss Fight: Active Recall</span>
-                    
+
                     <div className="w-full p-8 bg-slate-800/80 rounded-2xl mb-12 shadow-inner border border-slate-700">
                         <p className="text-2xl text-slate-200 font-medium italic">"{payload.definition}"</p>
                     </div>
@@ -89,7 +89,7 @@ export default function BossFight({ match, onGrade }) {
                             placeholder="Type the word..."
                             autoComplete="off"
                         />
-                        
+
                         {feedback && (
                             <div className="mt-6 animate-fade-in text-xl font-bold">
                                 {feedback === 'correct' && <span className="text-emerald-500">Perfect Execution!</span>}

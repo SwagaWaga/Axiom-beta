@@ -1,21 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { playClickSound } from '../../../utils/playSound';
+import SpellingChallenge from './SpellingChallenge';
 
-export default function QuickReviewPhase({ batchWords, onBatchComplete }) {
+export default function QuickReviewPhase({ batchWords, onWordComplete }) {
     const [pass, setPass] = useState(1);
     const [index, setIndex] = useState(0);
     const [showAnswer, setShowAnswer] = useState(false);
-    const [results, setResults] = useState([]);
+    const [p1Scores, setP1Scores] = useState({});
+    const [p2Data, setP2Data] = useState({}); // Stores intermediate data
+    const [isSaving, setIsSaving] = useState(false);
 
     const currentWord = batchWords[index];
-    const payload = currentWord.user_vocabulary;
-
-    useEffect(() => {
-        setPass(1);
-        setIndex(0);
-        setShowAnswer(false);
-        setResults([]);
-    }, [batchWords]);
+    const payload = currentWord?.user_vocabulary;
 
     const handlePass1 = (knewIt) => {
         playClickSound();
@@ -24,51 +20,64 @@ export default function QuickReviewPhase({ batchWords, onBatchComplete }) {
             return;
         }
 
-        const scoreAdjustment = knewIt ? 5 : (showAnswer ? -10 : 0); // Not Sure = 0 roughly if we had a button, but let's just stick to requirements: "I know it" (+5), "Don't know it" (-10). Wait, requirements had 3 buttons.
-        setResults(prev => {
-            const newRes = [...prev];
-            newRes[index] = { ...currentWord, p1_score: scoreAdjustment };
-            return newRes;
-        });
+        const scoreAdjustment = knewIt ? 5 : (showAnswer ? -10 : 0);
+        setP1Scores(prev => ({ ...prev, [payload.id]: scoreAdjustment }));
 
         setShowAnswer(false);
         if (index + 1 < batchWords.length) {
             setIndex(prev => prev + 1);
         } else {
             setPass(2);
-            setIndex(0);
+            setIndex(0); // Restart at first word for Pass 2 reflection
         }
     };
 
-    const handlePass2 = (diffGrade) => {
+    const handlePass2 = async (diffGrade) => {
         playClickSound();
         const p2_score = diffGrade === 'Hard' ? 2 : diffGrade === 'Normal' ? 8 : 15;
-        
-        setResults(prev => {
-            const newRes = [...prev];
-            const wordRes = newRes[index];
-            const finalRecScore = Math.min(100, Math.max(0, (wordRes.recognition_score || 0) + wordRes.p1_score + p2_score));
-            
-            newRes[index] = {
-                originalWord: currentWord,
-                grade: diffGrade,
-                dimensionUpdates: { recognition_score: finalRecScore }
-            };
-            return newRes;
-        });
+        const finalRecScore = Math.min(100, Math.max(0, (currentWord.recognition_score || 0) + (p1Scores[payload.id] || 0) + p2_score));
+
+        // Save data for pass 3 instead of firing onWordComplete immediately
+        setP2Data(prev => ({
+            ...prev,
+            [payload.id]: { diffGrade, recognition_score: finalRecScore }
+        }));
 
         if (index + 1 < batchWords.length) {
             setIndex(prev => prev + 1);
         } else {
-            onBatchComplete(results.map((r, i) => i === index ? {
-                originalWord: currentWord,
-                grade: diffGrade,
-                dimensionUpdates: { recognition_score: Math.min(100, Math.max(0, (currentWord.recognition_score || 0) + results[index].p1_score + p2_score)) }
-            } : r));
+            setPass(3);
+            setIndex(0); // Restart at first word for Pass 3 spelling
         }
     };
 
     if (!currentWord) return null;
+
+    if (pass === 3) {
+        const currentP2Data = p2Data[payload.id] || { diffGrade: 'Good', recognition_score: currentWord.recognition_score };
+
+        return (
+            <SpellingChallenge
+                match={currentWord}
+                onWordComplete={async (wordPayload, spellGrade, isPractice, spellUpdates, isFail) => {
+                    if (isSaving) return;
+                    setIsSaving(true);
+
+                    const finalUpdates = {
+                        recognition_score: currentP2Data.recognition_score,
+                        ...spellUpdates
+                    };
+
+                    // Execute the final save using spelling's grade
+                    await onWordComplete(wordPayload, spellGrade, isPractice, finalUpdates, isFail);
+
+                    // The engine will drop the word from batchWords array.
+                    // Word at index 0 drops out. New word shifts to index 0 dynamically.
+                    setIsSaving(false);
+                }}
+            />
+        );
+    }
 
     if (pass === 1) {
         return (
@@ -77,7 +86,7 @@ export default function QuickReviewPhase({ batchWords, onBatchComplete }) {
                     <div className="flex-1 flex flex-col justify-center items-center text-center">
                         <span className="text-xs font-black text-blue-500 uppercase tracking-widest block mb-4">Quick Review: Triage (Pass 1)</span>
                         <h2 className="text-4xl sm:text-6xl font-black text-white capitalize tracking-tight break-words mb-8">{payload.word}</h2>
-                        
+
                         {!showAnswer ? (
                             <div className="w-full mt-auto grid grid-cols-3 gap-2">
                                 <button onClick={() => handlePass1(false)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-4 px-2 rounded-xl transition-all">Don't Know</button>
@@ -107,15 +116,15 @@ export default function QuickReviewPhase({ batchWords, onBatchComplete }) {
                 <div className="flex-1 flex flex-col justify-center items-center text-center">
                     <span className="text-xs font-black text-orange-500 uppercase tracking-widest block mb-4">Quick Review: Reflection (Pass 2)</span>
                     <h2 className="text-4xl sm:text-6xl font-black text-white capitalize tracking-tight break-words mb-8">{payload.word}</h2>
-                    
+
                     <div className="w-full p-6 bg-slate-800/50 rounded-2xl border border-slate-700/50 text-left mb-8 shadow-inner">
                         <p className="text-xl text-slate-200 leading-relaxed font-medium"><span className="text-xs font-bold text-slate-500 uppercase block mb-1">Definition</span>{payload.definition}</p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full mt-auto">
-                        <button onClick={() => handlePass2('Hard')} className="p-4 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 font-black">Hard</button>
-                        <button onClick={() => handlePass2('Normal')} className="p-4 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 font-black">Normal</button>
-                        <button onClick={() => handlePass2('Easy')} className="p-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 font-black">Easy</button>
+                    <div className={`grid grid-cols-3 gap-3 sm:gap-4 w-full mt-auto transition-opacity ${isSaving ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <button onClick={() => handlePass2('Hard')} disabled={isSaving} className="p-4 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 font-black">Hard</button>
+                        <button onClick={() => handlePass2('Normal')} disabled={isSaving} className="p-4 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 font-black">Normal</button>
+                        <button onClick={() => handlePass2('Easy')} disabled={isSaving} className="p-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 font-black">Easy</button>
                     </div>
                 </div>
             </div>

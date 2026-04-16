@@ -11,11 +11,11 @@ export default function WarmUpScan({ match, onGrade }) {
 
     return (
         <div className="max-w-4xl mx-auto p-6 font-sans min-h-[70vh] flex flex-col items-center justify-center">
-            
+
             <div className="bg-slate-900 border border-slate-800 p-8 sm:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-2xl relative flex flex-col min-h-[400px]">
                 <div className="flex-1 flex flex-col justify-center items-center text-center">
                     <span className="text-xs font-black text-blue-500 uppercase tracking-[0.2em] block mb-4">Warm-Up Scan</span>
-                    
+
                     <h2 className="text-4xl sm:text-6xl font-black text-white capitalize tracking-tight break-words mb-8">
                         {wordPayload.word}
                     </h2>
@@ -49,9 +49,9 @@ export default function WarmUpScan({ match, onGrade }) {
                                 Don't Know It
                             </button>
                             <button
-                                onClick={() => { 
-                                    playClickSound(); 
-                                    onGrade('Good', { recognition_score: Math.min(100, (match.recognition_score || 0) + 25) }); 
+                                onClick={() => {
+                                    playClickSound();
+                                    onGrade('Good', { recognition_score: Math.min(100, (match.recognition_score || 0) + 25) });
                                 }}
                                 className="bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg"
                             >

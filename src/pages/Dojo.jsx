@@ -57,7 +57,7 @@ export default function Dojo({ session }) {
                     <QuitButton onQuit={handleQuit} />
                     <QuickReviewPhase
                         batchWords={batchItem?.words || []}
-                        onBatchComplete={engine.processBatchGrades}
+                        onWordComplete={engine.submitWordReview}
                     />
                 </div>
             );
@@ -68,7 +68,7 @@ export default function Dojo({ session }) {
                 <div className="relative">
                     <QuitButton onQuit={handleQuit} />
                     <ProgressBar current={engine.currentIndex} total={engine.queue.length} />
-                    <BossFight match={engine.queue[engine.currentIndex]} onGrade={engine.processSingleGrade} />
+                    <BossFight match={engine.queue[engine.currentIndex]} onWordComplete={engine.submitWordReview} />
                 </div>
             );
 
@@ -79,7 +79,7 @@ export default function Dojo({ session }) {
                     <ProgressBar current={engine.currentIndex} total={engine.queue.length} />
                     <DeepLearningPhase
                         match={engine.queue[engine.currentIndex]}
-                        onGrade={engine.processSingleGrade}
+                        onWordComplete={engine.submitWordReview}
                         session={session}
                     />
                 </div>
@@ -90,9 +90,9 @@ export default function Dojo({ session }) {
                 <div className="relative">
                     <QuitButton onQuit={handleQuit} />
                     <ProgressBar current={engine.currentIndex} total={engine.queue.length} />
-                    <SpellingChallenge 
-                        match={engine.queue[engine.currentIndex]} 
-                        onGrade={engine.processSingleGrade} 
+                    <SpellingChallenge
+                        match={engine.queue[engine.currentIndex]}
+                        onWordComplete={engine.submitWordReview}
                     />
                 </div>
             );
