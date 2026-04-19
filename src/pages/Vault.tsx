@@ -82,7 +82,7 @@ export default function Vault({ session, dailyStreak = 0 }: { session: any, dail
                 setLoading(true);
                 const { data, error } = await supabase
                     .from('user_vocabulary')
-                    .select('*')
+                    .select('*, word_mastery_profiles(*)')
                     .eq('user_id', session.user.id)
                     .order('last_practiced', { ascending: false });
 
@@ -183,8 +183,8 @@ export default function Vault({ session, dailyStreak = 0 }: { session: any, dail
     );
 
     const dnaStats = calculateDNAStats(vaultWords);
-    const academicWordCount = vaultWords.filter(w => w.dna_type === 'Academic').length;
-    const currentRank = calculateAcademicRank(academicWordCount);
+    // Bind rank progress to the entire Vault's size, fixing the 16/25 desync
+    const currentRank = calculateAcademicRank(vaultWords.length);
     // Handle "MAX" state
     const rankProgressPercentage = currentRank.next === "MAX"
         ? 100
@@ -254,36 +254,38 @@ export default function Vault({ session, dailyStreak = 0 }: { session: any, dail
 
     return (
         <div className="max-w-6xl mx-auto p-4 md:p-6 font-sans">
-            {/* Gamified Banner */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl md:rounded-3xl p-5 md:p-8 mb-6 md:mb-8 text-white shadow-xl">
-                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 md:gap-6">
+            {/* Minimalist Gamified Header */}
+            <div className="bg-slate-900/50 border-b border-slate-800 p-6 md:p-8 mb-6 md:mb-8 rounded-2xl md:rounded-3xl shadow-sm">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
                     <div className="flex-1 min-w-0">
-                        <h1 className="text-2xl md:text-4xl font-extrabold mb-1 md:mb-2 tracking-tight">Your Dictionary Vault</h1>
-                        <p className="text-indigo-100 text-sm md:text-lg font-medium opacity-90 mb-4 md:mb-6">Watch your vocabulary grow and evolve over time.</p>
+                        <h1 className="text-3xl md:text-5xl font-extrabold mb-2 tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 drop-shadow-sm">Vault</h1>
+                        <p className="text-slate-400 text-sm md:text-base font-medium mb-6">Watch your vocabulary grow and evolve over time.</p>
 
-                        {/* Rank Progress */}
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-4 md:p-5 rounded-2xl w-full max-w-lg">
-                            <div className="flex justify-between items-center mb-2">
-                                <h2 className="font-bold text-base md:text-lg flex items-center">
+                        {/* Minimalist Rank Progress */}
+                        <div className="w-full max-w-lg">
+                            <div className="flex justify-between items-end mb-2">
+                                <h2 className="font-bold text-sm md:text-base flex items-center text-slate-300">
                                     <span className="mr-2">🎓</span>
-                                    <span className="text-white/90 font-semibold">{currentRank.title}</span>
+                                    <span>{currentRank.title}</span>
                                 </h2>
-                                <span className="text-white/80 font-semibold text-xs md:text-sm">
-                                    {currentRank.current} / {currentRank.next === "MAX" ? '∞' : currentRank.next} Words
+                                <span className="text-slate-500 font-bold text-xs md:text-sm">
+                                    <span className="text-indigo-400">{currentRank.current}</span> / {currentRank.next === "MAX" ? '∞' : currentRank.next} Words
                                 </span>
                             </div>
-                            <div className="w-full bg-white/25 rounded-full h-3 overflow-hidden">
+                            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
                                 <div
-                                    className={`h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(255,255,255,0.5)] ${currentRank.barColor}`}
+                                    className={`h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(99,102,241,0.4)] ${currentRank.barColor}`}
                                     style={{ width: `${rankProgressPercentage}%` }}
                                 ></div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 px-6 md:px-10 py-5 md:py-8 rounded-2xl md:rounded-3xl text-center shadow-inner w-full lg:w-auto">
-                        <span className="block text-indigo-100 text-xs md:text-sm font-bold uppercase tracking-widest mb-1 md:mb-2">Vocabulary Power</span>
-                        <span className="text-4xl md:text-6xl font-black drop-shadow-md">⚡ {powerScore}</span>
+                    <div className="flex items-center gap-4 bg-slate-800/40 border border-slate-700/50 px-6 py-4 rounded-2xl text-center shadow-inner mt-4 lg:mt-0">
+                        <div className="text-left">
+                            <span className="block text-slate-500 text-[10px] font-black uppercase tracking-widest mb-0.5">Vocabulary Power</span>
+                            <span className="text-4xl md:text-5xl font-black text-white drop-shadow-md">⚡ {powerScore}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -363,16 +365,37 @@ export default function Vault({ session, dailyStreak = 0 }: { session: any, dail
                                 No words found matching &ldquo;{searchQuery}&rdquo;.
                             </div>
                         )}
-                        {filteredWords.map((wordObj) => (
-                            <div
-                                key={wordObj.id || wordObj.word}
-                                onClick={() => { playClickSound(); setSelectedWord(wordObj); }}
-                                className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800/80 transition-all hover:-translate-y-1 group"
-                            >
-                                <h3 className="text-2xl font-bold text-indigo-400 group-hover:text-indigo-300 transition-colors truncate max-w-full px-2">{wordObj.word}</h3>
-                                <span className="text-xs text-slate-500 mt-2 uppercase tracking-widest">Tap to Review</span>
-                            </div>
-                        ))}
+                        {filteredWords.map((wordObj) => {
+                            const profile = Array.isArray(wordObj.word_mastery_profiles) ? wordObj.word_mastery_profiles[0] : wordObj.word_mastery_profiles;
+                            // Calculate a clean 0-100 mastery percentage based on recognition score
+                            const progress = Math.min(100, Math.max(0, profile?.recognition_score || 0));
+                            
+                            return (
+                                <div
+                                    key={wordObj.id || wordObj.word}
+                                    onClick={() => { playClickSound(); setSelectedWord(wordObj); }}
+                                    className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800/80 transition-all hover:-translate-y-1 group relative overflow-hidden"
+                                >
+                                    <h3 className="text-2xl font-bold text-indigo-400 group-hover:text-indigo-300 transition-colors truncate max-w-full px-2">{wordObj.word}</h3>
+                                    <span className="text-[10px] text-slate-500 mt-1 mb-4 uppercase tracking-widest opacity-80 group-hover:opacity-100 transition-opacity">Tap to Review</span>
+                                    
+                                    <div className="w-full mt-auto pt-3 border-t border-slate-700/50">
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Mastery Progress</span>
+                                            <span className={`text-[10px] font-bold ${progress >= 100 ? 'text-amber-400' : progress >= 70 ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                                                {progress}%
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800/80">
+                                            <div 
+                                                className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm ${progress >= 100 ? 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]' : progress >= 70 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]'}`}
+                                                style={{ width: `${progress}%` }} 
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </>
             )}

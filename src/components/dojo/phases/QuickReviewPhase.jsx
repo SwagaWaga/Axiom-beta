@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { playClickSound } from '../../../utils/playSound';
 import SpellingChallenge from './SpellingChallenge';
 
-export default function QuickReviewPhase({ batchWords, onWordComplete }) {
+export default function QuickReviewPhase({ batchWords, onWordComplete, onPhaseComplete }) {
     const [pass, setPass] = useState(1);
     const [index, setIndex] = useState(0);
     const [showAnswer, setShowAnswer] = useState(false);
@@ -51,7 +51,28 @@ export default function QuickReviewPhase({ batchWords, onWordComplete }) {
         }
     };
 
-    if (!currentWord) return null;
+    // End-Of-Batch Orchestration
+    useEffect(() => {
+        if (!currentWord || batchWords.length === 0) {
+            const timer = setTimeout(() => {
+                if (onPhaseComplete) {
+                    onPhaseComplete();
+                }
+            }, 1000); // 1-second UX delay before triggering phase unmount
+            return () => clearTimeout(timer);
+        }
+    }, [currentWord, batchWords.length, onPhaseComplete]);
+
+    if (!currentWord || batchWords.length === 0) {
+        return (
+            <div className="max-w-4xl mx-auto p-6 font-sans min-h-[70vh] flex flex-col items-center justify-center">
+                <div className="bg-slate-900 border border-slate-800 p-8 sm:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-2xl text-center">
+                    <h2 className="text-3xl sm:text-4xl font-black text-indigo-400 capitalize tracking-tight break-words mb-4 animate-pulse">Session Complete</h2>
+                    <p className="text-slate-400 font-bold">Synchronizing your performance with the Dojo...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (pass === 3) {
         const currentP2Data = p2Data[payload.id] || { diffGrade: 'Good', recognition_score: currentWord.recognition_score };
@@ -68,12 +89,22 @@ export default function QuickReviewPhase({ batchWords, onWordComplete }) {
                         ...spellUpdates
                     };
 
-                    // Execute the final save using spelling's grade
-                    await onWordComplete(wordPayload, spellGrade, isPractice, finalUpdates, isFail);
+                    const readingGrade = currentP2Data.diffGrade || 'Good';
+                    const combinedGrade = (readingGrade === 'Hard' || spellGrade === 'Hard') ? 'Hard'
+                        : (readingGrade === 'Normal' || spellGrade === 'Normal') ? 'Normal'
+                            : 'Easy';
 
-                    // The engine will drop the word from batchWords array.
-                    // Word at index 0 drops out. New word shifts to index 0 dynamically.
-                    setIsSaving(false);
+                    try {
+                        // Execute the final save using combined grade
+                        await onWordComplete(wordPayload, combinedGrade, isPractice, finalUpdates, isFail);
+                    } catch (err) {
+                        console.error("QuickReview save rejected:", err);
+                        throw err;
+                    } finally {
+                        // The engine will drop the word from batchWords array.
+                        // Word at index 0 drops out. New word shifts to index 0 dynamically.
+                        setIsSaving(false);
+                    }
                 }}
             />
         );

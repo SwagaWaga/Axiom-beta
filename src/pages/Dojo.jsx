@@ -43,7 +43,7 @@ export default function Dojo({ session }) {
 
     const handleQuit = () => {
         playQuitSound();
-        engine.setActivePhase('WAITING_ROOM');
+        engine.endSession('WAITING_ROOM');
     };
 
     switch (engine.activePhase) {
@@ -52,50 +52,81 @@ export default function Dojo({ session }) {
 
         case 'QUICK_REVIEW': {
             const batchItem = engine.queue.find(i => i.type === 'BATCH_QUICK_REVIEW');
+            
+            if (!batchItem && engine.queue.length === 0) {
+                setTimeout(() => engine.endSession('SUMMARY'), 0);
+                return null;
+            }
+
             return (
                 <div className="relative">
                     <QuitButton onQuit={handleQuit} />
                     <QuickReviewPhase
                         batchWords={batchItem?.words || []}
                         onWordComplete={engine.submitWordReview}
+                        onPhaseComplete={() => {
+                            if (engine.queue.length === 0) {
+                                engine.endSession('SUMMARY');
+                            } else {
+                                engine.advanceQueue();
+                            }
+                        }}
                     />
                 </div>
             );
         }
 
-        case 'BOSS_FIGHT':
+        case 'BOSS_FIGHT': {
+            const bossItem = engine.queue[engine.currentIndex];
+            if (!bossItem) {
+                setTimeout(() => engine.setActivePhase('SUMMARY'), 0);
+                return null;
+            }
             return (
                 <div className="relative">
                     <QuitButton onQuit={handleQuit} />
                     <ProgressBar current={engine.currentIndex} total={engine.queue.length} />
-                    <BossFight match={engine.queue[engine.currentIndex]} onWordComplete={engine.submitWordReview} />
+                    <BossFight match={bossItem} onWordComplete={engine.submitWordReview} />
                 </div>
             );
+        }
 
-        case 'DEEP_LEARNING':
+        case 'DEEP_LEARNING': {
+            const deepItem = engine.queue[engine.currentIndex];
+            if (!deepItem) {
+                setTimeout(() => engine.setActivePhase('SUMMARY'), 0);
+                return null;
+            }
             return (
                 <div className="relative">
                     <QuitButton onQuit={handleQuit} />
                     <ProgressBar current={engine.currentIndex} total={engine.queue.length} />
                     <DeepLearningPhase
-                        match={engine.queue[engine.currentIndex]}
+                        match={deepItem}
                         onWordComplete={engine.submitWordReview}
                         session={session}
                     />
                 </div>
             );
+        }
 
-        case 'SPELLING_CHALLENGE':
+        case 'SPELLING_CHALLENGE': {
+            const spellItem = engine.queue[engine.currentIndex];
+            if (!spellItem) {
+                setTimeout(() => engine.setActivePhase('SUMMARY'), 0);
+                return null;
+            }
             return (
                 <div className="relative">
                     <QuitButton onQuit={handleQuit} />
                     <ProgressBar current={engine.currentIndex} total={engine.queue.length} />
                     <SpellingChallenge
-                        match={engine.queue[engine.currentIndex]}
+                        match={spellItem}
                         onWordComplete={engine.submitWordReview}
                     />
                 </div>
             );
+        }
 
 
         case 'LOCKED':
@@ -114,6 +145,7 @@ export default function Dojo({ session }) {
             );
 
         case 'VICTORY':
+        case 'SUMMARY':
             return <VictoryScreen stats={engine.sessionStats} onReturn={() => engine.setActivePhase('WAITING_ROOM')} />;
 
         default:

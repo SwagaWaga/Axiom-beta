@@ -117,24 +117,24 @@ export default function Admin({ session }) {
             if (!line) continue;
 
             const parts = line.split('|').map(item => item.trim());
-            const word         = parts[0] || '';
-            const category     = parts[1] || 'Lexicon';
-            const subject      = parts[2] || '';
-            const definition   = parts[3] || '';
-            const rawSynonyms  = parts[4] || '';
-            const rawAntonyms  = parts[5] || '';
+            const word = parts[0] || '';
+            const category = parts[1] || 'Lexicon';
+            const subject = parts[2] || '';
+            const definition = parts[3] || '';
+            const rawSynonyms = parts[4] || '';
+            const rawAntonyms = parts[5] || '';
             const rawCollocations = parts[6] || '';
-            const rawFamily    = parts[7] || '';
+            const rawFamily = parts[7] || '';
 
             if (!word) {
                 alert(`Syntax error on line ${i + 1}: missing word. Skipping.`);
                 continue;
             }
 
-            const synonyms    = rawSynonyms    ? rawSynonyms.split(',').map(s => s.trim()).filter(Boolean) : [];
-            const antonyms    = rawAntonyms    ? rawAntonyms.split(',').map(a => a.trim()).filter(Boolean) : [];
+            const synonyms = rawSynonyms ? rawSynonyms.split(',').map(s => s.trim()).filter(Boolean) : [];
+            const antonyms = rawAntonyms ? rawAntonyms.split(',').map(a => a.trim()).filter(Boolean) : [];
             const collocations = rawCollocations ? rawCollocations.split(',').map(c => c.trim()).filter(Boolean) : [];
-            const wordFamily  = rawFamily;
+            const wordFamily = rawFamily;
 
             parsedWords.push({
                 word,
@@ -243,7 +243,8 @@ export default function Admin({ session }) {
         setArticleListLoading(true);
         const { data, error } = await supabase
             .from('articles')
-            .select('id, title, category, sub_subject, difficulty_level')
+            .select('id, title, category, sub_subject, difficulty_level, created_at')
+            .order('sub_subject', { ascending: true })
             .order('created_at', { ascending: false });
         if (!error) setArticleList(data ?? []);
         setArticleListLoading(false);
@@ -260,7 +261,7 @@ export default function Admin({ session }) {
         try {
             const { error } = await supabase.from('articles').delete().eq('id', articleId);
             if (error) throw error;
-            
+
             // Update local state instantly:
             setArticleList(prev => prev.filter(a => a.id !== articleId));
             setStatusMessage('✅ Article deleted successfully!');
@@ -355,7 +356,7 @@ export default function Admin({ session }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (isSandboxActive) {
             setStatusMessage('❌ Action denied: New accounts are restricted from publishing for 24 hours.');
             return;
@@ -446,7 +447,7 @@ export default function Admin({ session }) {
                     <div>
                         <h3 className="text-lg font-bold text-amber-400 mb-1">Account Validation Period</h3>
                         <p className="text-sm leading-relaxed text-amber-200/90">
-                            Welcome! To protect platform integrity and prevent abuse, new accounts are placed in a temporary sandbox. 
+                            Welcome! To protect platform integrity and prevent abuse, new accounts are placed in a temporary sandbox.
                             <strong> High-volume operations such as bulk importing and article publishing are restricted for 24 hours.</strong>
                         </p>
                     </div>

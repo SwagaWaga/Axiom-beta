@@ -41,7 +41,9 @@ export default function Reader({ session }) {
         setIsLoadingMetadata(true);
         const { data, error } = await supabase
           .from('articles')
-          .select('id, title, category, sub_subject, difficulty_level');
+          .select('id, title, category, sub_subject, difficulty_level, created_at')
+          .order('sub_subject', { ascending: true })
+          .order('created_at', { ascending: false });
 
         if (error) throw error;
         setAllArticles(data || []);
@@ -153,24 +155,44 @@ export default function Reader({ session }) {
 
 ${fullText}
 
-Now, provide concise, IELTS-level definitions for the following words based strictly on how they are used in this context: ${pendingWords.join(', ')}.
+Now, provide concise, IELTS-level definitions for the following words based strictly on how they are used in this context: ${pendingWords.join(', ')}. Regardless of how the word appears in the provided text, always extract and return its base dictionary form (lemma) in the base_form field.`;
 
-You MUST return ONLY a raw, valid JSON object with NO markdown formatting, NO backticks, and NO extra text. The JSON must perfectly match this structure:
-[
-  {
-    "word": "...",
-    "definition": "...",
-    "partOfSpeech": "...",
-    "connections": {
-      "synonyms": ["...", "...", "..."],
-      "antonyms": ["...", "..."],
-      "wordFamily": "Noun: ..., Verb: ..., Adj: ...",
-      "collocations": ["...", "..."]
-    }
-  }
-]`;
-
-      const result = await model.generateContent(prompt);
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                word: { type: "string" },
+                base_form: {
+                  type: "string",
+                  description: "The infinitive, singular, or un-conjugated base dictionary form of the word."
+                },
+                definition: { type: "string" },
+                partOfSpeech: { type: "string" },
+                category: {
+                  type: "string",
+                  enum: ["Academic", "Technical", "Advanced", "Informal", "Basic"],
+                  description: "You must classify the word into exactly one of these categories based on its register and difficulty."
+                },
+                connections: {
+                  type: "object",
+                  properties: {
+                    synonyms: { type: "array", items: { type: "string" } },
+                    antonyms: { type: "array", items: { type: "string" } },
+                    wordFamily: { type: "string" },
+                    collocations: { type: "array", items: { type: "string" } }
+                  }
+                }
+              },
+              required: ["word", "base_form", "definition", "partOfSpeech", "category", "connections"]
+            }
+          }
+        }
+      });
       const raw = result.response.text().trim();
       console.log("RAW AI RESPONSE:", raw);
 
@@ -220,11 +242,13 @@ You MUST return ONLY a raw, valid JSON object with NO markdown formatting, NO ba
     );
 
     const dnaData = article?.dna_map?.[item.word.toLowerCase()];
-    const dnaType = typeof dnaData === 'string' ? dnaData : (dnaData?.category || "Lexicon");
+    // Strict assignment from Gemini extraction schema first, then fallback to db
+    const fallbackCategory = typeof dnaData === 'string' ? dnaData : (dnaData?.category || "Basic");
+    const dnaType = item.category || fallbackCategory;
 
     setCollectedWords(prev => [
       ...prev.filter(w => w.word !== item.word),
-      { word: item.word, context: contextString, definition: item.definition, dna_type: dnaType, audio_url: null, word_connections: item.connections || null }
+      { word: item.base_form, context: contextString, definition: item.definition, dna_type: dnaType, audio_url: null, word_connections: item.connections || null }
     ]);
     setSavedFromBatch(prev => [...prev, item.word]);
 
@@ -233,7 +257,7 @@ You MUST return ONLY a raw, valid JSON object with NO markdown formatting, NO ba
       try {
         const dbPayload = {
           user_id: session.user.id,
-          word: item.word,
+          word: item.base_form,
           definition: item.definition,
           part_of_speech: item.partOfSpeech || null,
           mastery_level: 0,
@@ -527,7 +551,9 @@ You MUST return ONLY a raw, valid JSON object with NO markdown formatting, NO ba
                             }`}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-cyan-300 font-black text-base mb-1">{item.word}</p>
+                            <p className="text-cyan-300 font-black text-base mb-1">
+                              {item.base_form} <span className="text-xs text-slate-500 font-normal uppercase tracking-widest ml-2">from "{item.word}"</span>
+                            </p>
                             <p className="text-slate-300 text-sm leading-relaxed">{item.definition}</p>
                           </div>
                           <button

@@ -29,19 +29,26 @@ export const Flashcard: React.FC<FlashcardProps> = ({
     setTimeout(() => setIsFlipping(false), 500); // Matches duration-500
   };
 
-  // Determine if the word has passed the early learning stages.
-  // If mastery_level is undefined, 0, 1, or 2, this MUST evaluate to false.
-  const currentPhase = wordObj.mastery_level || 0;
-  const isAdvancedPhase = Number(currentPhase) >= 3;
+  // Extract the profile from the deeply joined fetch logic or fallback securely
+  const profile = Array.isArray(wordObj.word_mastery_profiles) 
+    ? wordObj.word_mastery_profiles[0] 
+    : (wordObj.word_mastery_profiles || {});
+    
+  const recognitionScore = profile?.recognition_score || 0;
+  const isFullyMastered = profile?.is_mastered || recognitionScore >= 100;
 
-  const getGrowthIndicator = (level: number) => {
-    if (level >= 5) return { icon: '🌟', label: 'Mastered', color: 'text-yellow-400' };
-    if (level === 4) return { icon: '🌳', label: 'Tree', color: 'text-emerald-400' };
-    if (level === 3) return { icon: '🪴', label: 'Plant', color: 'text-emerald-400' };
-    if (level === 2) return { icon: '🌿', label: 'Sprout', color: 'text-emerald-400' };
-    return { icon: '🌱', label: 'Seedling', color: 'text-emerald-400' };
+  // Determine if the word has passed the early learning stages to reveal collocations
+  const isAdvancedPhase = recognitionScore >= 50;
+
+  const getMasteryBadge = (score: number, isMastered: boolean) => {
+    if (isMastered || score >= 100) return { icon: '👑', label: 'Mastered', color: 'text-amber-400 border-amber-500/50 bg-amber-500/10 px-3 py-1 rounded-full text-xs font-black' };
+    if (score >= 70) return { icon: '🌳', label: 'Sapling', color: 'text-emerald-400 border-emerald-500/50 bg-emerald-500/10 px-3 py-1 rounded-full text-xs font-bold' };
+    if (score >= 40) return { icon: '🌿', label: 'Sprout', color: 'text-teal-400 border-teal-500/50 bg-teal-500/10 px-3 py-1 rounded-full text-xs font-bold' };
+    if (score >= 15) return { icon: '🌱', label: 'Seedling', color: 'text-green-400 border-green-500/30 bg-green-500/10 px-3 py-1 rounded-full text-xs font-bold' };
+    return { icon: '🥚', label: 'Unseen', color: 'text-slate-400 border-slate-600/50 bg-slate-700/50 px-3 py-1 rounded-full text-xs font-bold' };
   };
-  const growth = getGrowthIndicator(wordObj.mastery_level || 1);
+  
+  const growth = getMasteryBadge(recognitionScore, isFullyMastered);
 
   return (
     <div

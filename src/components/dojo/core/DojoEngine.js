@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import { calculateNextInterval, evaluateRankPromotion, isWordDue } from '../../../lib/srsMath';
 import { determineAdaptiveRoute } from '../../../lib/dojoAdaptiveRouter';
@@ -81,6 +81,7 @@ const getBossFightStatus = (allWords) => {
 };
 
 export function useDojoEngine(session) {
+    const pendingUpserts = useRef(new Map());
     const [queue, setQueue] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [activePhase, setActivePhase] = useState('WAITING_ROOM');
@@ -88,8 +89,51 @@ export function useDojoEngine(session) {
     const [bossFightProgress, setBossFightProgress] = useState({ eligible: 0, required: BOSS_FIGHT_REQUIRED_COUNT });
     const [sessionStats, setSessionStats] = useState({ xp: 0, reviews: 0, promotions: 0, weakRescued: 0 });
 
-    const loadSession = async (mode) => {
+    const endSession = async (finalPhase = 'VICTORY', additionalXp = 0, additionalReview = 0) => {
+        setActivePhase(finalPhase);
+
+        const payloadArray = Array.from(pendingUpserts.current.values());
+        const totalXp = sessionStats.xp + additionalXp;
+        const totalReviews = sessionStats.reviews + additionalReview;
+
+        const tasks = [];
+
+        if (payloadArray.length > 0) {
+            tasks.push(
+                supabase.from('word_mastery_profiles')
+                    .upsert(payloadArray, { onConflict: 'user_id,word_id' })
+                    .then(({ error }) => {
+                        if (error) console.error("Supabase Bulk Upsert Error:", error);
+                    })
+            );
+        }
+
+        if (totalReviews > 0) {
+            tasks.push(
+                supabase.from('dojo_sessions').insert([{
+                    user_id: session.user.id,
+                    session_type: 'Regular Session',
+                    xp_earned: totalXp,
+                    words_reviewed: totalReviews,
+                    started_at: new Date().toISOString()
+                }]).then(({ error }) => {
+                    if (error) console.error("Dojo Session Log Error:", error);
+                })
+            );
+        }
+
+        await Promise.all(tasks);
+        pendingUpserts.current.clear();
+        if (finalPhase !== 'SUMMARY' && finalPhase !== 'VICTORY') {
+            setQueue([]);
+        }
+    };
+
+    const loadSession = async (modeOrConfig) => {
         setLockedReason(null);
+        
+        const mode = typeof modeOrConfig === 'string' ? modeOrConfig : modeOrConfig.phase;
+        const limit = typeof modeOrConfig === 'string' ? 10 : (modeOrConfig.limit || 10);
 
         // 1. Fetch raw vocabulary
         const { data: vocabData, error: vocabError } = await supabase
@@ -219,8 +263,20 @@ export function useDojoEngine(session) {
             }
 
             // 5c. Build the final eligible word list: review words first, practice words after
-            const modeEligibleWords = [...reviewPool, ...practicePool];
-            console.log(`[Dojo] Mode: ${mode} | Review: ${reviewPool.length} | Practice: ${practicePool.length}`);
+            let modeEligibleWords = [];
+            if (mode === 'Boss Fight Only') {
+                modeEligibleWords = reviewPool.slice(0, BOSS_FIGHT_REQUIRED_COUNT);
+            } else {
+                const slicedReviewPool = reviewPool.slice(0, limit);
+                const practiceSlotsNeeded = limit - slicedReviewPool.length;
+                let slicedPracticePool = [];
+                if (practiceSlotsNeeded > 0) {
+                    slicedPracticePool = practicePool.slice(0, practiceSlotsNeeded);
+                }
+                modeEligibleWords = [...slicedReviewPool, ...slicedPracticePool];
+            }
+            
+            console.log(`[Dojo] Mode: ${mode} | Eligible Combined: ${modeEligibleWords.length}`);
 
             // 6. Route each word to a phase.
             //    When the user explicitly picks a mode, we RESPECT that intent directly
@@ -285,24 +341,14 @@ export function useDojoEngine(session) {
             setCurrentIndex(nextIndex);
             setActivePhase(currentQ[nextIndex].next_phase);
         } else {
-            setActivePhase('VICTORY');
-            supabase.from('dojo_sessions').insert([{
-                user_id: session.user.id,
-                session_type: 'Regular Session',
-                xp_earned: sessionStats.xp,
-                words_reviewed: sessionStats.reviews,
-                started_at: new Date().toISOString()
-            }]);
-
-            // Step 2: Enforce Frontend State Invalidation
-            // Clear queue immediately after completion to prevent stale data reuse if the user loops back.
-            setQueue([]);
+            endSession('VICTORY');
         }
     };
 
     // Unified SRS Math and Save Logic
     const submitWordReview = async (wordProfile, grade, isPractice, dimensionUpdates = {}, penaltyLoop = false) => {
-        const wordId = wordProfile.user_vocabulary.id;
+        // Broadly extract primary key, guarding against missing nested objects
+        const wordId = wordProfile?.user_vocabulary?.id || wordProfile?.word_id || wordProfile?.id;
 
         // 1. Calculate SRS updates
         const skipSRS = isPractice || dimensionUpdates.skipSRS === true;
@@ -344,19 +390,35 @@ export function useDojoEngine(session) {
             ...newRankData
         };
 
-        // 3. Supabase Upsert
-        const { error } = await supabase.from('word_mastery_profiles').upsert(payload, { onConflict: 'user_id,word_id' });
-        if (error) {
-            console.error('[DojoEngine] submitWordReview upsert error:', error);
-            // Optionally handle error (e.g. queue not drained so it retries)
+        if (!wordId) {
+            const err = new Error("Missing word_id in submitWordReview payload");
+            console.error(err);
+            throw err;
         }
 
+        // Format next_review_at strictly to ISO string safely
+        try {
+            if (payload.next_review_at) {
+                payload.next_review_at = new Date(payload.next_review_at).toISOString();
+            } else {
+                payload.next_review_at = new Date().toISOString();
+            }
+        } catch (dbDateErr) {
+            console.error("Failed to parse next_review_at to ISO:", dbDateErr);
+            payload.next_review_at = new Date().toISOString();
+        }
+
+        // 3. Bulk Queue (defer network hit until session completion)
+        pendingUpserts.current.set(String(wordId), payload);
+
         // 4. Instant State Invalidation & Queue management
+        let isSessionComplete = false;
+
         setQueue(prevQueue => {
             let nextQ = prevQueue.map(item => {
                 if (item.type === 'BATCH_QUICK_REVIEW') {
-                    // Update batch internally
-                    const remainingWords = item.words.filter(w => w.user_vocabulary.id !== wordId);
+                    // Force strictly cast structural comparison to guarantee payload drops
+                    const remainingWords = item.words.filter(w => String(w.user_vocabulary.id) !== String(wordId));
                     return remainingWords.length > 0 ? { ...item, words: remainingWords } : null;
                 }
                 if (item.user_vocabulary?.id === wordId) {
@@ -380,14 +442,7 @@ export function useDojoEngine(session) {
 
             // Immediately manage activePhase within the same state tick
             if (nextQ.length === 0) {
-                setActivePhase('VICTORY');
-                supabase.from('dojo_sessions').insert([{
-                    user_id: session.user.id,
-                    session_type: 'Regular Session',
-                    xp_earned: prev.xp + xpGained,
-                    words_reviewed: prev.reviews + 1,
-                    started_at: new Date().toISOString()
-                }]);
+                isSessionComplete = true;
             } else if (currentIndex < nextQ.length) {
                 setActivePhase(nextQ[currentIndex].next_phase);
             } else {
@@ -398,7 +453,11 @@ export function useDojoEngine(session) {
 
             return nextQ;
         });
+
+        if (isSessionComplete) {
+            await endSession('SUMMARY', xpGained, 1);
+        }
     };
 
-    return { queue, currentIndex, activePhase, setActivePhase, sessionStats, lockedReason, bossFightProgress, loadSession, submitWordReview, advanceQueue };
+    return { queue, currentIndex, activePhase, setActivePhase, sessionStats, lockedReason, bossFightProgress, loadSession, submitWordReview, advanceQueue, endSession };
 }

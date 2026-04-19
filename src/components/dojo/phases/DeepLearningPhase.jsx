@@ -213,12 +213,16 @@ export default function DeepLearningPhase({ match, onWordComplete, session }) {
     };
 
     const handleComplete = (selfRating) => {
+        if (!match) {
+            console.error('[Deep Learning] match payload is undefined, intercepting completion.');
+            return;
+        }
         playClickSound();
         const reflectionPoints = selfRating === 2 ? 5 : selfRating === 1 ? 3 : 0;
         const allScores = [...stepScores, reflectionPoints];
         const totalGain = allScores.reduce((a, b) => a + b, 0);
         const netGain = isPractice ? Math.round(totalGain * PRACTICE_MULTIPLIER) : totalGain;
-        const newCtx = Math.min(100, Math.max(0, (match.context_score || 0) + netGain));
+        const newCtx = Math.min(100, Math.max(0, (match?.context_score || 0) + netGain));
         const grade = selfRating >= 1 ? 'Good' : 'Hard';
         onWordComplete(match, grade, isPractice, { context_score: newCtx });
     };

@@ -1,12 +1,12 @@
 // Pre-load audio objects — files must exist in public/sounds/
 const clickAudio = new Audio('/sounds/click.mp3');
-clickAudio.volume = 0.15;
+clickAudio.volume = 1.0;
 
 const hoverAudio = new Audio('/sounds/hover.mp3');
-hoverAudio.volume = 0.05;
+hoverAudio.volume = 0.5;
 
 const quitAudio = new Audio('/sounds/quit.mp3');
-quitAudio.volume = 0.15;
+quitAudio.volume = 1.0;
 
 export const playClickSound = () => {
     clickAudio.currentTime = 0; // Reset to start for rapid clicking

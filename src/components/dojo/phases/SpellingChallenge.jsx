@@ -90,11 +90,11 @@ export default function SpellingChallenge({ match, onWordComplete }) {
         const currentSpellingScore = match.spelling_score || 0;
 
         if (resultType === 'correct') {
-            onWordComplete(payload, 'Easy', match._isPractice, { spelling_score: Math.min(100, currentSpellingScore + 15), skipSRS: true });
+            onWordComplete(match, 'Easy', match._isPractice, { spelling_score: Math.min(100, currentSpellingScore + 15) });
         } else if (resultType === 'typo') {
-            onWordComplete(payload, 'Hard', match._isPractice, { spelling_score: Math.min(100, currentSpellingScore + 5), skipSRS: true });
+            onWordComplete(match, 'Hard', match._isPractice, { spelling_score: Math.min(100, currentSpellingScore + 5) });
         } else {
-            onWordComplete(payload, 'Hard', match._isPractice, { spelling_score: Math.max(0, currentSpellingScore - 5), skipSRS: true }, true);
+            onWordComplete(match, 'Hard', match._isPractice, { spelling_score: Math.max(0, currentSpellingScore - 5) }, true);
         }
     };
 
