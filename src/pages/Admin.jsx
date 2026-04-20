@@ -225,6 +225,75 @@ export default function Admin({ session }) {
         setQuizQuestions(newQuiz);
     };
 
+    // ── Local Regex-Based Smart Parse (No LLMs) ──
+    const handleSmartParse = () => {
+        if (!content) {
+            alert("Paste the article text with prefixes into the content box first.");
+            return;
+        }
+
+        try {
+            const sections = content.split('---');
+            const metaSection = sections[0] || '';
+            const contentSection = sections[1] || '';
+            const quizSection = sections[2] || '';
+
+            // 1. Metadata Extraction
+            const titleMatch = metaSection.match(/Title:\s*(.+)/i);
+            const categoryMatch = metaSection.match(/Category:\s*(.+)/i);
+            const difficultyMatch = metaSection.match(/Difficulty:\s*(.+)/i);
+            const subSubjectMatch = metaSection.match(/Sub-Subject:\s*(.+)/i);
+
+            if (titleMatch) setTitle(titleMatch[1].trim());
+            if (categoryMatch) setCategory(categoryMatch[1].trim());
+            if (difficultyMatch) setDifficulty(difficultyMatch[1].trim());
+            if (subSubjectMatch) setSubSubject(subSubjectMatch[1].trim());
+
+            // 2. Pure Article Content Generation
+            if (contentSection) {
+                setContent(contentSection.trim());
+            }
+
+            // 3. Quiz Data Pipeline
+            if (quizSection) {
+                const lines = quizSection.split('\n');
+                const parsedQuiz = [];
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+
+                    const parts = line.split('|').map(p => p.trim());
+                    // Need exactly 7 pipe-delimited segments
+                    if (parts.length >= 7) {
+                        const correctOptionNumber = parseInt(parts[5], 10);
+                        if (correctOptionNumber >= 1 && correctOptionNumber <= 4) {
+                            parsedQuiz.push({
+                                question: parts[0],
+                                options: [parts[1], parts[2], parts[3], parts[4]],
+                                correct_answer: parts[correctOptionNumber], 
+                                explanation: parts[6]
+                            });
+                        } else {
+                            console.warn(`Smart Parse Quiz Warning: Line ${i + 1} option must be 1-4. Skipping.`);
+                        }
+                    } else {
+                        console.warn(`Smart Parse Quiz Warning: Line ${i + 1} lacks 7 segments. Skipping.`);
+                    }
+                }
+
+                if (parsedQuiz.length > 0) {
+                    setQuizQuestions(prev => [...prev, ...parsedQuiz]);
+                }
+            }
+            
+            setStatusMessage('✅ Unified Smart Parse complete!');
+        } catch (error) {
+            console.error("Smart Parse Error:", error);
+            setStatusMessage('❌ Smart Parse failed. Ensure proper formatting.');
+        }
+    };
+
     const clearArticleForm = useCallback(() => {
         setTitle('');
         setCategory(AXIOM_SUBJECTS[0].name);
@@ -712,7 +781,18 @@ export default function Admin({ session }) {
                             </div>
 
                             <div>
-                                <label htmlFor="content" className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Content</label>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label htmlFor="content" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Content</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => { playClickSound(); handleSmartParse(); }}
+                                        disabled={isSubmitting || !content.trim()}
+                                        className="text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-3 py-1.5 rounded-lg shadow transition-colors flex items-center gap-1.5"
+                                        title="Parse tags (Title:, Category:, Difficulty:, Sub-Subject:) and extract content below '---'"
+                                    >
+                                        <span>⚡</span> Smart Parse
+                                    </button>
+                                </div>
                                 <textarea
                                     id="content"
                                     value={content}
