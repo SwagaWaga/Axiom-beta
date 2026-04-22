@@ -122,7 +122,18 @@ export default function Reader({ session }) {
     return match ? match.trim() : text;
   };
 
-  const handleWordClick = (word) => {
+  // --- Feedback helpers ---
+  // feedbackType: 'info' (default) | 'error'
+  const showFeedback = (msg, type = 'info', duration = 1500) => {
+    setFeedback({ msg, type });
+    setTimeout(() => setFeedback(null), duration);
+  };
+
+  const handleWordClick = (e, word) => {
+    // Prevent mobile ghost-click / scroll-jank bubbling
+    e.preventDefault();
+    e.stopPropagation();
+
     const cleanWord = word.toLowerCase().replace(/[.,!?;:()"'`]/g, "");
     if (!cleanWord) return;
 
@@ -132,12 +143,11 @@ export default function Reader({ session }) {
       setPendingWords(prev => prev.filter(w => w !== cleanWord));
       // Also remove from batchResults if already processed
       setBatchResults(prev => prev.filter(r => r.word !== cleanWord));
-      setFeedback(`🗑️ Removed: ${cleanWord}`);
+      showFeedback(`🗑️ Removed: ${cleanWord}`);
     } else {
       setPendingWords(prev => [...prev, cleanWord]);
-      setFeedback(`📌 Bagged: ${cleanWord}`);
+      showFeedback(`📌 Bagged: ${cleanWord}`);
     }
-    setTimeout(() => setFeedback(""), 1500);
   };
 
   const handleBatchExtraction = async (fullText) => {
@@ -148,6 +158,8 @@ export default function Reader({ session }) {
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("Gemini API key is missing. Check VITE_GEMINI_API_KEY.");
+
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
@@ -222,15 +234,20 @@ Now, provide concise, IELTS-level definitions for the following words based stri
         throw new Error("Unexpected response format: Expected an array of objects.");
       }
     } catch (err) {
+      // Surface the real error visibly on-screen (critical for mobile debugging)
       console.error("Batch extraction failed:", err);
-      setFeedback("❌ Batch extraction failed. Please try again.");
-      setTimeout(() => setFeedback(""), 3000);
+      const errMsg = err?.message || String(err);
+      showFeedback(`❌ AI Error: ${errMsg}`, 'error', 6000);
     } finally {
       setIsBatchProcessing(false);
     }
   };
 
-  const handleSaveWordToVault = async (item) => {
+  const handleSaveWordToVault = async (e, item) => {
+    // Prevent mobile ghost-click bubbling (e.g. tap closing the results panel)
+    e.preventDefault();
+    e.stopPropagation();
+
     if (savedFromBatch.includes(item.word)) return;
 
     const contextString = extractSentence(
@@ -269,10 +286,21 @@ Now, provide concise, IELTS-level definitions for the following words based stri
 
         const { error: dbErr } = await supabase.from('user_vocabulary').upsert(dbPayload, { onConflict: 'user_id,word' });
         if (dbErr) {
+          // Surface Supabase errors visibly on mobile
           console.error("Supabase Insert Error:", dbErr);
+          showFeedback(`❌ Save failed: ${dbErr.message}`, 'error', 5000);
+          // Roll back optimistic UI update
+          setSavedFromBatch(prev => prev.filter(w => w !== item.word));
+          setCollectedWords(prev => prev.filter(w => w.word !== item.base_form));
         }
       } catch (dbErr) {
+        // Surface unexpected errors visibly on mobile
         console.error('Supabase upsert failed unexpectedly:', dbErr);
+        const errMsg = dbErr?.message || String(dbErr);
+        showFeedback(`❌ Save error: ${errMsg}`, 'error', 5000);
+        // Roll back optimistic UI update
+        setSavedFromBatch(prev => prev.filter(w => w !== item.word));
+        setCollectedWords(prev => prev.filter(w => w.word !== item.base_form));
       }
     }
   };
@@ -557,7 +585,7 @@ Now, provide concise, IELTS-level definitions for the following words based stri
                             <p className="text-slate-300 text-sm leading-relaxed">{item.definition}</p>
                           </div>
                           <button
-                            onClick={() => handleSaveWordToVault(item)}
+                            onClick={(e) => handleSaveWordToVault(e, item)}
                             disabled={isSaved}
                             className={`flex-shrink-0 text-sm font-bold px-4 py-2 rounded-xl transition-all duration-200 ${isSaved
                               ? 'bg-emerald-700/30 text-emerald-400 cursor-default'
@@ -626,7 +654,7 @@ Now, provide concise, IELTS-level definitions for the following words based stri
                   return (
                     <span key={`${pIdx}-${wIdx}`}>
                       <button
-                        onClick={() => handleWordClick(word)}
+                        onClick={(e) => handleWordClick(e, word)}
                         className={`inline-block py-1 rounded transition-colors ${isCollected
                           ? 'bg-yellow-200 dark:bg-yellow-700/60 text-yellow-900 dark:text-yellow-100 border-b-2 border-yellow-400 dark:border-yellow-600 font-medium px-1'
                           : isPending
@@ -656,11 +684,17 @@ Now, provide concise, IELTS-level definitions for the following words based stri
         </button>
       </div>
 
-      {/* Feedback Animation */}
+      {/* Feedback / Error Toast */}
       <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none">
         {feedback && (
-          <div className="bg-slate-800 text-white px-8 py-3 rounded-full shadow-2xl font-bold text-lg animate-fade-in-up border border-slate-700">
-            {feedback}
+          <div
+            className={`px-8 py-3 rounded-full shadow-2xl font-bold text-lg animate-fade-in-up border ${
+              feedback.type === 'error'
+                ? 'bg-red-900 text-red-100 border-red-600'
+                : 'bg-slate-800 text-white border-slate-700'
+            }`}
+          >
+            {feedback.msg}
           </div>
         )}
       </div>
