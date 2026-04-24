@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import SmartReview from './SmartReview';
 import ReadingQuiz from './ReadingQuiz';
@@ -33,6 +33,35 @@ export default function Reader({ session }) {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchResults, setBatchResults] = useState([]);
   const [savedFromBatch, setSavedFromBatch] = useState([]);
+
+  // Keep a ref that always reflects the latest isBatchProcessing value
+  // so the unmount-trap cleanup can read the current value without
+  // being captured in a stale closure.
+  const isBatchProcessingRef = useRef(false);
+  useEffect(() => {
+    isBatchProcessingRef.current = isBatchProcessing;
+  }, [isBatchProcessing]);
+
+  // ── DIAGNOSTIC UNMOUNT TRAP ────────────────────────────────────────────────
+  // Fires an alert if the Reader component is destroyed while the AI call is
+  // still in-flight. This helps identify whether the issue is an unmount (e.g.
+  // navigation change, ErrorBoundary catch) vs. a silent state reset.
+  useEffect(() => {
+    return () => {
+      if (isBatchProcessingRef.current) {
+        // Use a non-blocking console group so it's visible in DevTools even on
+        // mobile when alerts are suppressed by the browser.
+        console.error(
+          '%c[AXIOM DEBUG] Reader unmounted while batch AI call was in-flight!',
+          'color: red; font-size: 16px; font-weight: bold;'
+        );
+        // Show an on-screen alert as a last resort so it's visible without DevTools.
+        // Wrapped in try/catch in case the environment blocks alert().
+        try { alert('[AXIOM] Component unmounted while loading vocabulary! Check console for details.'); } catch (_) {}
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 1. Fetch metadata on mount
   useEffect(() => {
@@ -310,6 +339,15 @@ Now, provide concise, IELTS-level definitions for the following words based stri
   };
 
   const clearSelection = () => {
+    // ── LOADING GUARD ──────────────────────────────────────────────────────────
+    // On mobile, touch events can fire with a ~300 ms delay after the initial
+    // tap. If the user taps "Finish & Take Quiz" and the touch ghost-fires on
+    // the "Back" button beneath it, this guard prevents a premature teardown
+    // of the component while the AI vocabulary API call is still in-flight.
+    if (isBatchProcessingRef.current) {
+      showFeedback('⏳ Please wait — vocabulary is being processed…', 'info', 3000);
+      return;
+    }
     setSelectedArticleId(null);
     setArticle(null);
     setError(null);
@@ -320,24 +358,31 @@ Now, provide concise, IELTS-level definitions for the following words based stri
     setGamePhase('reading');
   };
 
-  // Auto-trigger batch extraction as soon as the comprehension quiz completes
+  // Auto-trigger batch extraction as soon as the comprehension quiz completes.
+  // We intentionally list only `gamePhase` in the dependency array, mirroring
+  // the original intent: run exactly once when the phase flips to 'quiz'.
+  // All other values are read via their ref equivalents to avoid double-fires.
   useEffect(() => {
-    if (gamePhase === 'quiz' && pendingWords.length > 0 && !isBatchProcessing && batchResults.length === 0) {
-      const text =
-        typeof article?.content_data === 'string'
-          ? article.content_data
-          : article?.content_data?.text ||
-          (article?.content_data?.segments
-            ? article.content_data.segments.map(seg => seg.text).join('\n\n')
-            : '');
-      handleBatchExtraction(text);
-    }
+    if (gamePhase !== 'quiz') return;
+    if (pendingWords.length === 0 || isBatchProcessingRef.current || batchResults.length > 0) return;
+    const text =
+      typeof article?.content_data === 'string'
+        ? article.content_data
+        : article?.content_data?.text ||
+        (article?.content_data?.segments
+          ? article.content_data.segments.map(seg => seg.text).join('\n\n')
+          : '');
+    handleBatchExtraction(text);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gamePhase]);
 
   // --- View 0: Initial Loading Metadata ---
   if (isLoadingMetadata) {
     return (
-      <div className="p-6 min-h-[70vh] flex items-center justify-center">
+      // Use 70dvh (dynamic viewport height) instead of 70vh so that the
+      // mobile browser's address bar / soft keyboard reflow does NOT cause a
+      // full unmount-and-remount of the reader tree.
+      <div className="p-6 min-h-[70dvh] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-blue-600 dark:text-blue-400 font-bold text-xl animate-pulse">Loading catalogue...</p>
@@ -496,7 +541,7 @@ Now, provide concise, IELTS-level definitions for the following words based stri
   // --- Loading Article View ---
   if (loading) {
     return (
-      <div className="p-6 min-h-[70vh] font-sans flex items-center justify-center">
+      <div className="p-6 min-h-[70dvh] font-sans flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-blue-600 dark:text-blue-400 font-bold text-xl animate-pulse">Loading mission...</p>
@@ -507,7 +552,7 @@ Now, provide concise, IELTS-level definitions for the following words based stri
 
   if (error || !article) {
     return (
-      <div className="p-6 min-h-[70vh] font-sans flex flex-col justify-center">
+      <div className="p-6 min-h-[70dvh] font-sans flex flex-col justify-center">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-8 rounded-2xl text-center shadow-sm">
           <div className="text-4xl mb-4">⚠️</div>
           <h2 className="text-red-700 dark:text-red-400 font-extrabold text-2xl mb-2">Mission Unavailable</h2>
@@ -614,7 +659,7 @@ Now, provide concise, IELTS-level definitions for the following words based stri
     || (article?.content_data?.segments ? article.content_data.segments.map(seg => seg.text).join('\n\n') : "No content available.");
 
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-6 min-h-[70vh] font-sans">
+    <div className="max-w-3xl mx-auto p-4 md:p-6 min-h-[70dvh] font-sans">
       {/* HUD */}
       <div className="flex justify-between items-center mb-5 md:mb-8 bg-white dark:bg-slate-800 p-3 md:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
         <div className="flex items-center space-x-4">
@@ -677,7 +722,14 @@ Now, provide concise, IELTS-level definitions for the following words based stri
       {/* Finish Article Button */}
       <div className="mt-8">
         <button
-          onClick={() => setGamePhase('comprehension')}
+          onClick={(e) => {
+            // Stop the tap event from bubbling to any parent that might
+            // call clearSelection(). On mobile, touch events can re-fire on
+            // elements that shift into position under the tap target.
+            e.preventDefault();
+            e.stopPropagation();
+            setGamePhase('comprehension');
+          }}
           className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold text-lg rounded-2xl shadow-lg hover:-translate-y-1 hover:shadow-blue-500/40 transition-all"
         >
           Finish & Take Quiz 🚀
