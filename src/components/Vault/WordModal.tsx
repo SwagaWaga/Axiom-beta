@@ -1,23 +1,41 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { VocabularyWord } from '../../types/database';
 
 interface WordModalProps {
   word: VocabularyWord;
   onClose: () => void;
+  isLoading?: boolean;
 }
 
-export const WordModal: React.FC<WordModalProps> = ({ word, onClose }) => {
+export const WordModal: React.FC<WordModalProps> = ({ word, onClose, isLoading }) => {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
+  // Unmount trap: alert if unmounting while loading
+  useEffect(() => {
+    return () => {
+      if (isLoading) {
+        alert('Component unmounted while loading!');
+      }
+    };
+  }, [isLoading]);
+
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
-      onClick={onClose} 
+      onClick={() => { if (!isLoading) onClose(); }} 
     >
       <div 
         className="bg-slate-800 border border-slate-700 shadow-2xl rounded-2xl p-6 w-full max-w-lg relative animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()} 
       >
         <button 
-          onClick={onClose}
+          onClick={() => { if (!isLoading) onClose(); }}
           className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 bg-slate-800/50 hover:bg-slate-700 p-2 rounded-full"
         >
           ✕
